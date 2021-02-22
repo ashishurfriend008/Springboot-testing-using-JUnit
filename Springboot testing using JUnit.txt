@@ -1,0 +1,172 @@
+Test Case - We are writing test case to check whether our all functionalities are working properly or not.
+
+Suppose, we deploy one of the API without testing then some of the functionalities related to that API won't work.
+
+In traditional approach, we write test case for controller then first it will hit the controller method. After that, it will goes to the service and then it goes to repository.So, in order to test our application we are hiting the database and multiple time hiting the DB is not a good practise.
+
+In order to avoid such issues mockito came into picture.
+
+Suppose, we want to mock service data.At first, the request came to controller then it will forward to the service and instead it will again forward the request to repository and repository to DB it will mock the data which will behave like a database.It will mock the datai.e. Mackito to service.The request flow will not go to the DB for testing purpose. That is the moto for mackito framework.
+
+>> Create a springboot CRUD application which implement MongoRepository from UserRepository.Here, we are going to mock the UserRepository data.That means, we no need to hit the database instead of getting actual data from database.We will simply mock the data and return it back to our service.
+
+>> In springboot application main class annotate with @RunWith(SpringRunner.class) and @SpringBootTest.
+Here, inject the UserService as we are going to write the test case for service, so annotate with @Autowired.We will mock UserRepository, so annotate with @MockBean.
+
+Note - assertEquals() - contains two parameters i.e. expected and actual is the service call. 
+
+	@Autowired
+	private UserService service;
+
+	@MockBean
+	private UserRepository repository;
+
+
+>> In springboot application main class,
+
+//Mackito method for getUsers() method i.e.repository.findAll(); 
+//thenReturn() - return the value which we are going to mock which will return the list of record.
+//findAll() - return the list of record.
+@Test
+	public void getUsersTest() {
+		when(repository.findAll()).thenReturn(Stream
+				.of(new User(376, "Danile", 31, "USA"), new User(958, "Huy", 35, "UK")).collect(Collectors.toList()));
+		assertEquals(2(expected), service.getUsers().size());
+	}
+
+	//based on one address we can have multiple user.
+	@Test
+	public void getUserbyAddressTest() {
+		String address = "Bangalore";
+		when(repository.findByAddress(address))
+				.thenReturn(Stream.of(new User(376, "Danile", 31, "USA")).collect(Collectors.toList()));
+		assertEquals(1, service.getUserbyAddress(address).size());
+	}
+	
+	//Return type of save will be the entity
+	@Test
+	public void saveUserTest() {
+		User user = new User(999, "Pranya", 33, "Pune");
+		when(repository.save(user)).thenReturn(user);
+		assertEquals(user, service.addUser(user));
+	}
+
+	@Test
+	public void deleteUserTest() {
+		User user = new User(999, "Pranya", 33, "Pune");
+		service.deleteUser(user);
+		verify(repository, times(1)).delete(user);
+	}
+
+>> For full test coverage, we need to write the test cases for all the methods.
+
+
+JUnit Testing Using Mackito & Power Mock 
+----------------------------------------
+Power Mock API - Basically, with the help of power mock API we can mock any of our static, final or private method.This we cannot do in mackito framework.
+
+>> In a springboot application, lets write the test case for NotificationUtil.sendEmail() method.As this is the static method we are going to write the test case with the help of power mock.
+
+public class NotificationUtil {
+	
+	
+	public static String sendEmail(String email) {
+		//use mail API 
+		return "success";
+	}
+
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@ToString
+public class OrderRequest {
+
+	private int id;
+	private String name;
+	private int quantity;
+	private int price;
+	private String emailId;
+	private boolean isDiscountable;
+
+}
+
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@ToString
+public class OrderResponse {
+	private OrderRequest response;
+	private String message;
+	private int statusCode;
+
+}
+
+
+@Service
+public class OrderService {
+
+	public OrderResponse checkoutOrder(OrderRequest order) {
+		// call DAO
+		int discount=addDiscount(order);
+		order.setPrice(order.getPrice()-discount);
+		String message = NotificationUtil.sendEmail(order.getEmailId());
+		return new OrderResponse(order, message, HttpStatus.OK.value());
+	}
+
+	private int addDiscount(OrderRequest order) {
+		System.out.println("called...");
+		int price = order.getPrice();
+		int discountAMount = 0;
+		if (order.isDiscountable()) {
+			if (order.getPrice() > 1000) {
+				discountAMount = price * 10 / 100;
+			} else {
+				discountAMount = price;
+			}
+		} else {
+			discountAMount = price;
+		}
+		return discountAMount;
+	}
+
+@RunWith(PowerMockRunner.class)
+@PrepareForTest(fullyQualifiedNames = "com.javatechie.pm.api.*")
+public class PowermockApiApplicationTests {
+
+	@InjectMocks
+	private OrderService service;
+
+	OrderRequest request = new OrderRequest(111, "Mobile", 1, 10000, "test@gmail.com", true);
+
+	@Before
+	public void init() {
+		MockitoAnnotations.initMocks(NotificationUtil.class);
+	}
+
+	@Test
+	public void testStaticMethod() {
+		// Given
+		String emailid = "test@gmail.com";
+		PowerMockito.mockStatic(NotificationUtil.class);
+		// When
+		when(NotificationUtil.sendEmail(emailid)).thenReturn("success");
+		// Then
+		OrderResponse response = service.checkoutOrder(request);
+		assertEquals("success", response.getMessage());
+	}
+
+	
+	//spy means it will first instantiate that object and then it will inject.
+	//Here, we want to spy our order service
+	@Test
+	public void testPrivateMethod() throws Exception {
+		// When
+		OrderService spy = PowerMockito.spy(service);
+		doReturn(2000).when(spy, "addDiscount", ArgumentMatchers.any());
+		// Then
+		OrderResponse response = spy.checkoutOrder(request);
+		int price = response.getResponse().getPrice();// 9000
+		System.out.println("price : " + price);
+		//compare the original price with actual price after discount
+		assertEquals(8000, price);
+	}
